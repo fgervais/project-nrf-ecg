@@ -108,9 +108,6 @@ int main(void)
 
 
 		LOG_INF("ADC reading:");
-		LOG_INF("- %s, channel %d: ",
-		       battery_adc.dev->name,
-		       battery_adc.channel_id);
 
 		adc_sequence_init_dt(&battery_adc, &sequence);
 		ret = adc_read(battery_adc.dev, &sequence);
@@ -119,15 +116,18 @@ int main(void)
 			continue;
 		}
 
-		LOG_INF("%"PRId16, buf);
+		LOG_INF("%s, channel %d: %d",
+		       battery_adc.dev->name,
+		       battery_adc.channel_id,
+		       buf);
 
-		val_mv = buf;
+		val_mv = buf * 5; // Divided by 5 at source (NRF_SAADC_VDDHDIV5)
 		ret = adc_raw_to_millivolts_dt(&battery_adc,
 					       &val_mv);
 		if (ret < 0) {
-			LOG_ERR(" (value in mV not available)");
+			LOG_ERR("Value in mV not available");
 		} else {
-			LOG_INF(" = %"PRId32" mV", val_mv);
+			LOG_INF("🔋 = %"PRId32" mV", val_mv);
 		}
 
 
