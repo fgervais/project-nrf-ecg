@@ -14,6 +14,7 @@
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 #include <app_version.h>
+#include <mymodule/base/openthread.h>
 #include <mymodule/base/reset.h>
 #include <mymodule/base/watchdog.h>
 
@@ -76,6 +77,17 @@ int main(void)
 		LOG_ERR("Could not setup battery ADC (%d)", ret);
 		return ret;
 	}
+
+	ret = openthread_my_start();
+	if (ret < 0) {
+		LOG_ERR("Could not start openthread");
+		return ret;
+	}
+
+	LOG_INF("💤 waiting for openthread to be ready");
+	openthread_wait(OT_ROLE_SET | 
+			OT_MESH_LOCAL_ADDR_SET | 
+			OT_HAS_NEIGHBORS);
 
 	LOG_INF("🆗 initialized");
 
