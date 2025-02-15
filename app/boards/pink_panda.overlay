@@ -8,6 +8,9 @@
 	chosen {
 		zephyr,entropy = &rng;
 	};
+	zephyr,user {
+		io-channels = <&adc 0>;
+	};
 };
 &pinctrl {
 	i2c0_default: i2c0_default {
@@ -94,7 +97,18 @@
 
 };
 &adc {
-	status = "disabled";
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	channel@0 {
+		reg = <0>;
+		zephyr,gain = "ADC_GAIN_1_2"; /* Max: 3.8V / 10 = 380mV */
+		zephyr,reference = "ADC_REF_INTERNAL";				/* 600mV */
+		zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;	/* 10us */
+		zephyr,input-positive = <NRF_SAADC_VDDHDIV5>;
+		zephyr,resolution = <14>;
+		zephyr,oversampling = <8>;
+	};
 };
 &uart1 {
 	status = "disabled";

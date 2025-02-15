@@ -1,4 +1,5 @@
 #include <app_event_manager.h>
+#include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/kernel.h>
@@ -29,10 +30,19 @@ int main(void)
 #if defined(CONFIG_APP_SUSPEND_CONSOLE)
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 #endif
+	static const struct adc_dt_spec battery_adc = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0);
 	int ret;
 	uint32_t reset_cause;
 	int main_wdt_chan_id = -1;
 	uint32_t events;
+	int16_t buf;
+	int32_t val_mv;
+
+	struct adc_sequence sequence = {
+		.buffer = &buf,
+		/* buffer size in bytes, not number of samples */
+		.buffer_size = sizeof(buf),
+	};
 
 	ret = watchdog_new_channel(wdt, &main_wdt_chan_id);
 	if (ret < 0) {
@@ -54,6 +64,17 @@ int main(void)
 		LOG_ERR("Event manager not initialized");
 	} else {
 		module_set_state(MODULE_STATE_READY);
+	}
+
+	if (!device_is_ready(battery_adc.dev)) {
+		LOG_ERR("ADC controller device not ready");
+		return -ENODEV;
+	}
+
+	ret = adc_channel_setup_dt(&battery_adc);
+	if (ret < 0) {
+		LOG_ERR("Could not setup battery ADC (%d)", ret);
+		return ret;
 	}
 
 	LOG_INF("🆗 initialized");
@@ -84,6 +105,31 @@ int main(void)
 		if (events & BUTTON_PRESS_EVENT) {
 			LOG_INF("handling button press event");
 		}
+
+
+		LOG_INF("ADC reading:");
+		LOG_INF("- %s, channel %d: ",
+		       battery_adc.dev->name,
+		       battery_adc.channel_id);
+
+		adc_sequence_init_dt(&battery_adc, &sequence);
+		ret = adc_read(battery_adc.dev, &sequence);
+		if (ret < 0) {
+			LOG_ERR("Could not read (%d)", ret);
+			continue;
+		}
+
+		LOG_INF("%"PRId16, buf);
+
+		val_mv = buf;
+		ret = adc_raw_to_millivolts_dt(&battery_adc,
+					       &val_mv);
+		if (ret < 0) {
+			LOG_ERR(" (value in mV not available)");
+		} else {
+			LOG_INF(" = %"PRId32" mV", val_mv);
+		}
+
 
 		LOG_INF("🦴 feed watchdog");
 		wdt_feed(wdt, main_wdt_chan_id);
