@@ -3,6 +3,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/kernel.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/socket.h>
 #include <zephyr/pm/device.h>
 #include <zephyr/debug/thread_analyzer.h>
 
@@ -19,7 +21,10 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #include <mymodule/base/watchdog.h>
 
 
-#define BUTTON_PRESS_EVENT		BIT(0)
+#define BUTTON_PRESS_EVENT	BIT(0)
+
+#define MY_PC_ADDR6		"fd04:2240::1cef"
+#define MY_PC_PORT		50000
 
 
 static K_EVENT_DEFINE(button_events);
@@ -100,6 +105,32 @@ int main(void)
 #endif
 
 	thread_analyzer_print(0);
+
+	// struct sockaddr_in6 *broker6 = (struct sockaddr_in6 *)&broker;
+
+	// broker6->sin6_family = AF_INET6;
+	// broker6->sin6_port = htons(CONFIG_MY_MODULE_BASE_HA_MQTT_SERVER_PORT);
+	// zsock_inet_pton(AF_INET6, CONFIG_MY_MODULE_BASE_HA_MQTT_SERVER_ADDR, &broker6->sin_addr);
+
+
+	struct sockaddr_in6 serv_addr;
+	int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+
+	serv_addr.sin6_family = AF_INET6;
+	serv_addr.sin6_port = htons(MY_PC_PORT);
+
+	ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
+	if (ret <= 0) {
+		LOG_ERR("Invalid address / Address not supported");
+		return ret;
+	}
+
+	ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	if (ret < 0) {
+		LOG_ERR("Connect failed");
+		return ret;
+	}
+
 
 	LOG_INF("┌──────────────────────────────────────────────────────────┐");
 	LOG_INF("│ Entering main loop                                       │");
