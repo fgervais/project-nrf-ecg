@@ -113,6 +113,8 @@ int main(void)
 	// zsock_inet_pton(AF_INET6, CONFIG_MY_MODULE_BASE_HA_MQTT_SERVER_ADDR, &broker6->sin_addr);
 
 
+	k_sleep(K_SECONDS(2));
+
 	struct sockaddr_in6 serv_addr;
 	int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 
