@@ -175,6 +175,10 @@ int main(void)
 			LOG_INF("🔋 = %"PRId32" mV", val_mv);
 		}
 
+		ret = send(sockfd, &val_mv, sizeof(val_mv), 0);
+		if (ret < 0) {
+			LOG_ERR("Could not send (%d)", ret);
+		}
 
 		LOG_INF("🦴 feed watchdog");
 		wdt_feed(wdt, main_wdt_chan_id);
