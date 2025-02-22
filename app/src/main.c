@@ -43,6 +43,7 @@ int main(void)
 	uint32_t events;
 	int16_t buf;
 	int32_t val_mv;
+	uint32_t network_val_mv;
 
 	struct adc_sequence sequence = {
 		.buffer = &buf,
@@ -175,7 +176,8 @@ int main(void)
 			LOG_INF("🔋 = %"PRId32" mV", val_mv);
 		}
 
-		ret = send(sockfd, &val_mv, sizeof(val_mv), 0);
+		network_val_mv = htonl(val_mv);
+		ret = send(sockfd, &network_val_mv, sizeof(network_val_mv), 0);
 		if (ret < 0) {
 			LOG_ERR("Could not send (%d)", ret);
 		}
