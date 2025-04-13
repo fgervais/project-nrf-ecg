@@ -60,6 +60,15 @@
 	pinctrl-0 = <&spi0_default>;
 	pinctrl-1 = <&spi0_sleep>;
 	pinctrl-names = "default", "sleep";
+
+	cs-gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
+
+	max30001: max30001@0 {
+		compatible = "maxim,max30001";
+		reg = <0>;
+		spi-max-frequency = <DT_FREQ_M(8)>;
+		ecg-gain = <MAX30001_DT_ECG_GAIN_20V_PER_V>;
+	};
 };
 &spi1 {
 	status = "disabled";
