@@ -1,11 +1,14 @@
 #include <app_event_manager.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/sensor_data_types.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/rtio/rtio.h>
 #include <zephyr/debug/thread_analyzer.h>
 
 #define MODULE main
@@ -29,6 +32,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 static K_EVENT_DEFINE(button_events);
 
+SENSOR_DT_READ_IODEV(ecg_iodev, DT_NODELABEL(max30001),
+		{SENSOR_CHAN_VOLTAGE, 0});
+
+RTIO_DEFINE(ecg_rtio_ctx, 1, 1);
+
 
 int main(void)
 {
@@ -37,18 +45,20 @@ int main(void)
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 #endif
 	static const struct adc_dt_spec battery_adc = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0);
+	const struct device *ecg = DEVICE_DT_GET(DT_NODELABEL(max30001));
 	int ret;
 	uint32_t reset_cause;
 	int main_wdt_chan_id = -1;
 	uint32_t events;
-	int16_t buf;
+	int16_t adc_buf;
 	int32_t val_mv;
 	uint32_t network_val_mv;
+	uint8_t ecg_buf[128];
 
 	struct adc_sequence sequence = {
-		.buffer = &buf,
+		.buffer = &adc_buf,
 		/* buffer size in bytes, not number of samples */
-		.buffer_size = sizeof(buf),
+		.buffer_size = sizeof(adc_buf),
 	};
 
 	ret = watchdog_new_channel(wdt, &main_wdt_chan_id);
@@ -75,6 +85,12 @@ int main(void)
 
 	if (!device_is_ready(battery_adc.dev)) {
 		LOG_ERR("ADC controller device not ready");
+		return -ENODEV;
+	}
+
+	if (!device_is_ready(ecg)) {
+		LOG_ERR("Device \"%s\" is not ready",
+		       ecg->name);
 		return -ENODEV;
 	}
 
@@ -135,6 +151,18 @@ int main(void)
 	}
 
 
+
+
+	ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx, ecg_buf, sizeof(ecg_buf));
+
+	if (ret != 0) {
+		LOG_ERR("%s: sensor_read() failed: %d\n", ecg->name, ret);
+		return ret;
+	}
+
+
+
+
 	LOG_INF("┌──────────────────────────────────────────────────────────┐");
 	LOG_INF("│ Entering main loop                                       │");
 	LOG_INF("└──────────────────────────────────────────────────────────┘");
@@ -165,9 +193,9 @@ int main(void)
 		LOG_INF("%s, channel %d: %d",
 		       battery_adc.dev->name,
 		       battery_adc.channel_id,
-		       buf);
+		       adc_buf);
 
-		val_mv = buf * 5; // Divided by 5 at source (NRF_SAADC_VDDHDIV5)
+		val_mv = adc_buf * 5; // Divided by 5 at source (NRF_SAADC_VDDHDIV5)
 		ret = adc_raw_to_millivolts_dt(&battery_adc,
 					       &val_mv);
 		if (ret < 0) {
