@@ -100,16 +100,16 @@ int main(void)
 		return ret;
 	}
 
-	ret = openthread_my_start();
-	if (ret < 0) {
-		LOG_ERR("Could not start openthread");
-		return ret;
-	}
+	// ret = openthread_my_start();
+	// if (ret < 0) {
+	// 	LOG_ERR("Could not start openthread");
+	// 	return ret;
+	// }
 
-	LOG_INF("💤 waiting for openthread to be ready");
-	openthread_wait(OT_ROLE_SET | 
-			OT_ROUTABLE_ADDR_SET | 
-			OT_HAS_NEIGHBORS);
+	// LOG_INF("💤 waiting for openthread to be ready");
+	// openthread_wait(OT_ROLE_SET | 
+	// 		OT_ROUTABLE_ADDR_SET | 
+	// 		OT_HAS_NEIGHBORS);
 
 	LOG_INF("🆗 initialized");
 
@@ -130,25 +130,25 @@ int main(void)
 	// zsock_inet_pton(AF_INET6, CONFIG_MY_MODULE_BASE_HA_MQTT_SERVER_ADDR, &broker6->sin_addr);
 
 
-	k_sleep(K_SECONDS(1));
+	// k_sleep(K_SECONDS(1));
 
-	struct sockaddr_in6 serv_addr;
-	int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+	// struct sockaddr_in6 serv_addr;
+	// int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 
-	serv_addr.sin6_family = AF_INET6;
-	serv_addr.sin6_port = htons(MY_PC_PORT);
+	// serv_addr.sin6_family = AF_INET6;
+	// serv_addr.sin6_port = htons(MY_PC_PORT);
 
-	ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
-	if (ret <= 0) {
-		LOG_ERR("Invalid address / Address not supported");
-		return ret;
-	}
+	// ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
+	// if (ret <= 0) {
+	// 	LOG_ERR("Invalid address / Address not supported");
+	// 	return ret;
+	// }
 
-	ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-	if (ret < 0) {
-		LOG_ERR("Connect failed");
-		return ret;
-	}
+	// ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	// if (ret < 0) {
+	// 	LOG_ERR("Connect failed");
+	// 	return ret;
+	// }
 
 
 
@@ -204,11 +204,11 @@ int main(void)
 			LOG_INF("🔋 = %"PRId32" mV", val_mv);
 		}
 
-		network_val_mv = htonl(val_mv);
-		ret = send(sockfd, &network_val_mv, sizeof(network_val_mv), 0);
-		if (ret < 0) {
-			LOG_ERR("Could not send (%d)", ret);
-		}
+		// network_val_mv = htonl(val_mv);
+		// ret = send(sockfd, &network_val_mv, sizeof(network_val_mv), 0);
+		// if (ret < 0) {
+		// 	LOG_ERR("Could not send (%d)", ret);
+		// }
 
 		LOG_INF("🦴 feed watchdog");
 		wdt_feed(wdt, main_wdt_chan_id);
