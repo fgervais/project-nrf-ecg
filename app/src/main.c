@@ -53,7 +53,9 @@ int main(void)
 	int16_t adc_buf;
 	int32_t val_mv;
 	uint32_t network_val_mv;
-	uint8_t ecg_buf[128];
+	uint8_t ecg_buf[128] = {0};
+	struct sensor_value value_ecg = {0};
+	int i;
 
 	struct adc_sequence sequence = {
 		.buffer = &adc_buf,
@@ -151,6 +153,19 @@ int main(void)
 	// }
 
 
+	for (i = 0; i<10; i++) {
+		ret = sensor_sample_fetch(ecg);
+		if (ret) {
+			printk("sensor_sample_fetch failed ret %d\n", ret);
+			return 0;
+		}
+
+		ret = sensor_channel_get(ecg, SENSOR_CHAN_VOLTAGE, &value_ecg);
+		LOG_INF("🫀 %f", sensor_value_to_double(&value_ecg));
+
+		// k_sleep(K_MSEC(8));
+	}
+
 
 
 	ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx, ecg_buf, sizeof(ecg_buf));
@@ -159,6 +174,9 @@ int main(void)
 		LOG_ERR("%s: sensor_read() failed: %d\n", ecg->name, ret);
 		return ret;
 	}
+
+	// LOG_INF("🫀 %d", events);
+	LOG_HEXDUMP_INF(ecg_buf, sizeof(ecg_buf), "🫀");
 
 
 
