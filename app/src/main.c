@@ -175,7 +175,7 @@ int main(void)
 		ecg_buf, SENSOR_CHAN_VOLTAGE, 0);
 
 
-	for (i = 0; i<10; i++) {
+	for (i = 0; i<1000; i++) {
 		ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx,
 				  ecg_buf, sizeof(ecg_buf));
 		if (ret != 0) {
@@ -184,16 +184,20 @@ int main(void)
 		}
 
 		// LOG_INF("🫀 %d", events);
-		LOG_HEXDUMP_INF(ecg_buf, sizeof(ecg_buf), "🫀");
+		// LOG_HEXDUMP_INF(ecg_buf, sizeof(ecg_buf), "");
 
 		ret = sensor_decode(&ecg_decoder, &ecg_data, 1);
+		if (ret == -ENODATA) {
+			k_msleep(50);
+			continue;
+		}
 		if (ret < 0) {
 			LOG_ERR("%s: sensor_decode() failed: %d\n",
 				ecg->name, ret);
 			break;
 		}
 
-		LOG_INF("Decoded ECG %" PRIsensor_q31_data,
+		LOG_INF("🫀 Decoded ECG %" PRIsensor_q31_data,
 		       PRIsensor_q31_data_arg(ecg_data, 0));
 
 		ecg_decoder.fit = 0;
