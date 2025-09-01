@@ -1,11 +1,14 @@
 #include <app_event_manager.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/sensor.h>
+#include <zephyr/drivers/sensor_data_types.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/rtio/rtio.h>
 #include <zephyr/debug/thread_analyzer.h>
 
 #define MODULE main
@@ -29,6 +32,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 
 static K_EVENT_DEFINE(button_events);
 
+SENSOR_DT_READ_IODEV(ecg_iodev, DT_NODELABEL(max30001),
+		{SENSOR_CHAN_VOLTAGE, 0});
+
+RTIO_DEFINE(ecg_rtio_ctx, 1, 1);
+
 
 int main(void)
 {
@@ -37,18 +45,22 @@ int main(void)
 	const struct device *cons = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 #endif
 	static const struct adc_dt_spec battery_adc = ADC_DT_SPEC_GET_BY_IDX(DT_PATH(zephyr_user), 0);
+	const struct device *ecg = DEVICE_DT_GET(DT_NODELABEL(max30001));
 	int ret;
 	uint32_t reset_cause;
 	int main_wdt_chan_id = -1;
 	uint32_t events;
-	int16_t buf;
+	int16_t adc_buf;
 	int32_t val_mv;
 	uint32_t network_val_mv;
+	uint8_t ecg_buf[32] = {0};
+	struct sensor_value value_ecg = {0};
+	int i;
 
 	struct adc_sequence sequence = {
-		.buffer = &buf,
+		.buffer = &adc_buf,
 		/* buffer size in bytes, not number of samples */
-		.buffer_size = sizeof(buf),
+		.buffer_size = sizeof(adc_buf),
 	};
 
 	ret = watchdog_new_channel(wdt, &main_wdt_chan_id);
@@ -78,11 +90,19 @@ int main(void)
 		return -ENODEV;
 	}
 
+	if (!device_is_ready(ecg)) {
+		LOG_ERR("Device \"%s\" is not ready",
+		       ecg->name);
+		return -ENODEV;
+	}
+
 	ret = adc_channel_setup_dt(&battery_adc);
 	if (ret < 0) {
 		LOG_ERR("Could not setup battery ADC (%d)", ret);
 		return ret;
 	}
+
+
 
 	ret = openthread_my_start();
 	if (ret < 0) {
@@ -94,6 +114,8 @@ int main(void)
 	openthread_wait(OT_ROLE_SET | 
 			OT_ROUTABLE_ADDR_SET | 
 			OT_HAS_NEIGHBORS);
+
+
 
 	LOG_INF("🆗 initialized");
 
@@ -107,6 +129,7 @@ int main(void)
 
 	thread_analyzer_print(0);
 
+
 	// struct sockaddr_in6 *broker6 = (struct sockaddr_in6 *)&broker;
 
 	// broker6->sin6_family = AF_INET6;
@@ -114,7 +137,7 @@ int main(void)
 	// zsock_inet_pton(AF_INET6, CONFIG_MY_MODULE_BASE_HA_MQTT_SERVER_ADDR, &broker6->sin_addr);
 
 
-	k_sleep(K_SECONDS(1));
+	k_sleep(K_MSEC(50));
 
 	struct sockaddr_in6 serv_addr;
 	int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
@@ -133,6 +156,69 @@ int main(void)
 		LOG_ERR("Connect failed");
 		return ret;
 	}
+
+
+
+
+	// for (i = 0; i<10; i++) {
+	// 	ret = sensor_sample_fetch(ecg);
+	// 	if (ret) {
+	// 		printk("sensor_sample_fetch failed ret %d\n", ret);
+	// 		return 0;
+	// 	}
+
+	// 	ret = sensor_channel_get(ecg, SENSOR_CHAN_VOLTAGE, &value_ecg);
+	// 	LOG_INF("🫀 %f", sensor_value_to_double(&value_ecg));
+
+	// 	// k_sleep(K_MSEC(8));
+	// }
+
+
+	struct sensor_q31_data ecg_data = {0};
+	struct sensor_decode_context ecg_decoder = SENSOR_DECODE_CONTEXT_INIT(
+		SENSOR_DECODER_DT_GET(DT_NODELABEL(max30001)),
+		ecg_buf, SENSOR_CHAN_VOLTAGE, 0);
+	uint32_t network_ecg_voltage;
+
+
+	for (i = 0; i<10000; i++) {
+		ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx,
+				  ecg_buf, sizeof(ecg_buf));
+		if (ret != 0) {
+			LOG_ERR("%s: sensor_read() failed: %d\n", ecg->name, ret);
+			return ret;
+		}
+
+		// LOG_INF("🫀 %d", events);
+		// LOG_HEXDUMP_INF(ecg_buf, sizeof(ecg_buf), "");
+
+		ret = sensor_decode(&ecg_decoder, &ecg_data, 1);
+		if (ret == -ENODATA) {
+			k_msleep(50);
+			continue;
+		}
+		if (ret < 0) {
+			LOG_ERR("%s: sensor_decode() failed: %d\n",
+				ecg->name, ret);
+			break;
+		}
+
+		LOG_INF("🫀 Decoded ECG %" PRIsensor_q31_data,
+		       PRIsensor_q31_data_arg(ecg_data, 0));
+
+		network_ecg_voltage = htonl(ecg_data.readings[0].voltage);
+		ret = send(sockfd, &network_ecg_voltage,
+			   sizeof(network_ecg_voltage), 0);
+		if (ret < 0) {
+			LOG_ERR("Could not send (%d)", ret);
+		}
+
+		ecg_decoder.fit = 0;
+		wdt_feed(wdt, main_wdt_chan_id);
+		k_msleep(1);
+	}
+
+
 
 
 	LOG_INF("┌──────────────────────────────────────────────────────────┐");
@@ -165,9 +251,9 @@ int main(void)
 		LOG_INF("%s, channel %d: %d",
 		       battery_adc.dev->name,
 		       battery_adc.channel_id,
-		       buf);
+		       adc_buf);
 
-		val_mv = buf * 5; // Divided by 5 at source (NRF_SAADC_VDDHDIV5)
+		val_mv = adc_buf * 5; // Divided by 5 at source (NRF_SAADC_VDDHDIV5)
 		ret = adc_raw_to_millivolts_dt(&battery_adc,
 					       &val_mv);
 		if (ret < 0) {
@@ -176,11 +262,11 @@ int main(void)
 			LOG_INF("🔋 = %"PRId32" mV", val_mv);
 		}
 
-		network_val_mv = htonl(val_mv);
-		ret = send(sockfd, &network_val_mv, sizeof(network_val_mv), 0);
-		if (ret < 0) {
-			LOG_ERR("Could not send (%d)", ret);
-		}
+		// network_val_mv = htonl(val_mv);
+		// ret = send(sockfd, &network_val_mv, sizeof(network_val_mv), 0);
+		// if (ret < 0) {
+		// 	LOG_ERR("Could not send (%d)", ret);
+		// }
 
 		LOG_INF("🦴 feed watchdog");
 		wdt_feed(wdt, main_wdt_chan_id);
