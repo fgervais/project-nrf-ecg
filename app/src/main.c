@@ -181,7 +181,7 @@ int main(void)
 	uint32_t network_ecg_voltage;
 
 
-	for (i = 0; i<100; i++) {
+	for (i = 0; i<10000; i++) {
 		ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx,
 				  ecg_buf, sizeof(ecg_buf));
 		if (ret != 0) {
@@ -214,6 +214,7 @@ int main(void)
 		}
 
 		ecg_decoder.fit = 0;
+		wdt_feed(wdt, main_wdt_chan_id);
 		k_msleep(1);
 	}
 
