@@ -102,16 +102,20 @@ int main(void)
 		return ret;
 	}
 
-	// ret = openthread_my_start();
-	// if (ret < 0) {
-	// 	LOG_ERR("Could not start openthread");
-	// 	return ret;
-	// }
 
-	// LOG_INF("💤 waiting for openthread to be ready");
-	// openthread_wait(OT_ROLE_SET | 
-	// 		OT_ROUTABLE_ADDR_SET | 
-	// 		OT_HAS_NEIGHBORS);
+
+	ret = openthread_my_start();
+	if (ret < 0) {
+		LOG_ERR("Could not start openthread");
+		return ret;
+	}
+
+	LOG_INF("💤 waiting for openthread to be ready");
+	openthread_wait(OT_ROLE_SET | 
+			OT_ROUTABLE_ADDR_SET | 
+			OT_HAS_NEIGHBORS);
+
+
 
 	LOG_INF("🆗 initialized");
 
@@ -125,6 +129,7 @@ int main(void)
 
 	thread_analyzer_print(0);
 
+
 	// struct sockaddr_in6 *broker6 = (struct sockaddr_in6 *)&broker;
 
 	// broker6->sin6_family = AF_INET6;
@@ -132,25 +137,25 @@ int main(void)
 	// zsock_inet_pton(AF_INET6, CONFIG_MY_MODULE_BASE_HA_MQTT_SERVER_ADDR, &broker6->sin_addr);
 
 
-	// k_sleep(K_SECONDS(1));
+	k_sleep(K_MSEC(50));
 
-	// struct sockaddr_in6 serv_addr;
-	// int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+	struct sockaddr_in6 serv_addr;
+	int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 
-	// serv_addr.sin6_family = AF_INET6;
-	// serv_addr.sin6_port = htons(MY_PC_PORT);
+	serv_addr.sin6_family = AF_INET6;
+	serv_addr.sin6_port = htons(MY_PC_PORT);
 
-	// ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
-	// if (ret <= 0) {
-	// 	LOG_ERR("Invalid address / Address not supported");
-	// 	return ret;
-	// }
+	ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
+	if (ret <= 0) {
+		LOG_ERR("Invalid address / Address not supported");
+		return ret;
+	}
 
-	// ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-	// if (ret < 0) {
-	// 	LOG_ERR("Connect failed");
-	// 	return ret;
-	// }
+	ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	if (ret < 0) {
+		LOG_ERR("Connect failed");
+		return ret;
+	}
 
 
 
@@ -173,9 +178,10 @@ int main(void)
 	struct sensor_decode_context ecg_decoder = SENSOR_DECODE_CONTEXT_INIT(
 		SENSOR_DECODER_DT_GET(DT_NODELABEL(max30001)),
 		ecg_buf, SENSOR_CHAN_VOLTAGE, 0);
+	uint32_t network_ecg_voltage;
 
 
-	for (i = 0; i<1000; i++) {
+	for (i = 0; i<100; i++) {
 		ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx,
 				  ecg_buf, sizeof(ecg_buf));
 		if (ret != 0) {
@@ -200,8 +206,14 @@ int main(void)
 		LOG_INF("🫀 Decoded ECG %" PRIsensor_q31_data,
 		       PRIsensor_q31_data_arg(ecg_data, 0));
 
-		ecg_decoder.fit = 0;
+		network_ecg_voltage = htonl(ecg_data.readings[0].voltage);
+		ret = send(sockfd, &network_ecg_voltage,
+			   sizeof(network_ecg_voltage), 0);
+		if (ret < 0) {
+			LOG_ERR("Could not send (%d)", ret);
+		}
 
+		ecg_decoder.fit = 0;
 		k_msleep(1);
 	}
 
