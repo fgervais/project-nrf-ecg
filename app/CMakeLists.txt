@@ -1,3 +1,4 @@
+list(APPEND OVERLAY_CONFIG "coap-client.conf")
 list(APPEND OVERLAY_CONFIG "openthread.conf")
 list(APPEND OVERLAY_CONFIG "secret.conf")
 
