@@ -324,6 +324,7 @@ int main(void)
 		       PRIsensor_q31_data_arg(ecg_data, 0));
 
 		network_ecg_buffer[buffer_len] = htonl(ecg_data.readings[0].voltage);
+		buffer_len += 1;
 
 		// network_ecg_voltage = htonl(ecg_data.readings[0].voltage);
 		// ret = send(sockfd, &network_ecg_voltage,
