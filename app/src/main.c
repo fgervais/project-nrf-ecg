@@ -290,7 +290,7 @@ int main(void)
 	size_t buffer_len = 0;
 
 
-	for (i = 0; i<100; i++) {
+	for (i = 0; i<1000; i++) {
 		ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx,
 				  ecg_buf, sizeof(ecg_buf));
 		if (ret != 0) {
@@ -314,12 +314,12 @@ int main(void)
 
 
 
-			break;
+			// break;
 
 
 
 			wdt_feed(wdt, main_wdt_chan_id);
-			k_msleep(50);
+			k_msleep(150);
 			continue;
 		}
 		if (ret < 0) {
