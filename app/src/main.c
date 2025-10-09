@@ -57,7 +57,7 @@ static void on_coap_response(int16_t result_code, size_t offset,
 		LOG_INF("🎉 CoAP succeeded");
 	}
 	else {
-		LOG_ERR("Error during CoAP download, result_code=%d", result_code);
+		LOG_ERR("Error during CoAP transfer, result_code=%d", result_code);
 	}
 
 	// openthread_request_normal_latency("coap response");
@@ -311,6 +311,13 @@ int main(void)
 
 			buffer_len = 0;
 
+
+
+			break;
+
+
+
+			wdt_feed(wdt, main_wdt_chan_id);
 			k_msleep(50);
 			continue;
 		}
