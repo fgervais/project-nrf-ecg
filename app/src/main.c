@@ -207,6 +207,7 @@ int main(void)
 
 
 	k_sleep(K_MSEC(50));
+	k_sleep(K_SECONDS(1));
 
 	// struct sockaddr_in6 serv_addr;
 	// int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
