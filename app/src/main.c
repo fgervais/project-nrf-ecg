@@ -5,6 +5,7 @@
 #include <zephyr/drivers/sensor_data_types.h>
 #include <zephyr/drivers/watchdog.h>
 #include <zephyr/kernel.h>
+#include <zephyr/net/coap_client.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/pm/device.h>
@@ -29,6 +30,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 #define MY_PC_ADDR6		"fd04:2240::1cef"
 #define MY_PC_PORT		50000
 
+#define COAP_PORT		5683
+#define COAP_PATH_ECG		"ecg"
+
+#define DIRECT_GLOBAL_IP6_ADDRESS \
+        { { { 0xfd, 0x04, 0x22, 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x1c, 0xef } } }
 
 static K_EVENT_DEFINE(button_events);
 
@@ -37,6 +43,69 @@ SENSOR_DT_READ_IODEV(ecg_iodev, DT_NODELABEL(max30001),
 
 RTIO_DEFINE(ecg_rtio_ctx, 1, 1);
 
+
+static void on_coap_response(int16_t result_code, size_t offset,
+			     const uint8_t *payload, size_t len,
+			     bool last_block, void *user_data)
+{
+	// int *sockfd = (int *)user_data;
+
+	LOG_INF("CoAP response, result_code=%d, offset=%u, len=%u, last_block=%d",
+		result_code, offset, len, last_block);
+
+	if (result_code == COAP_RESPONSE_CODE_CHANGED) {
+		LOG_INF("🎉 CoAP succeeded");
+	}
+	else {
+		LOG_ERR("Error during CoAP transfer, result_code=%d", result_code);
+	}
+
+	// openthread_request_normal_latency("coap response");
+
+	// zsock_close(*sockfd);
+}
+
+static int send_ecg_buffer(struct coap_client *client,
+			   int sockfd,
+			   struct sockaddr *sa,
+			   uint32_t *buf,
+			   size_t len)
+{
+	int ret;
+	// int sockfd;
+	struct coap_client_request request = {
+		.method = COAP_METHOD_POST,
+		.confirmable = true,
+		.path = COAP_PATH_ECG,
+		.fmt = COAP_CONTENT_FORMAT_APP_OCTET_STREAM,
+		.payload = (uint8_t *)buf,
+		.len = len * sizeof(uint32_t),
+		.cb = on_coap_response,
+		.options = NULL,
+		.num_options = 0,
+		// .user_data = &sockfd,
+		.user_data = NULL,
+	};
+
+	// sockfd = zsock_socket(sa->sa_family, SOCK_DGRAM, 0);
+	// if (sockfd < 0) {
+	// 	LOG_ERR("Failed to create socket, err %d", errno);
+	// 	return -errno;
+	// }
+
+	LOG_INF("Starting CoAP request");
+
+	// openthread_request_low_latency("coap request");
+
+	ret = coap_client_req(client, sockfd, sa, &request, NULL);
+	if (ret) {
+		LOG_ERR("Failed to send CoAP request, err %d", ret);
+		// openthread_request_normal_latency("coap request error");
+		return ret;
+	}
+
+	return 0;
+}
 
 int main(void)
 {
@@ -138,24 +207,62 @@ int main(void)
 
 
 	k_sleep(K_MSEC(50));
+	k_sleep(K_SECONDS(1));
 
-	struct sockaddr_in6 serv_addr;
-	int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+	// struct sockaddr_in6 serv_addr;
+	// int sockfd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
 
-	serv_addr.sin6_family = AF_INET6;
-	serv_addr.sin6_port = htons(MY_PC_PORT);
+	// serv_addr.sin6_family = AF_INET6;
+	// // serv_addr.sin6_port = htons(MY_PC_PORT);
+	// serv_addr.sin6_port = htons(COAP_PORT);
 
-	ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
+	// ret = inet_pton(AF_INET6, MY_PC_ADDR6, &serv_addr.sin6_addr);
+	// if (ret <= 0) {
+	// 	LOG_ERR("Invalid address / Address not supported");
+	// 	return ret;
+	// }
+
+	// ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	// if (ret < 0) {
+	// 	LOG_ERR("Connect failed");
+	// 	return ret;
+	// }
+
+
+
+
+
+	static struct coap_client coap_client;
+	struct sockaddr_in6 sockaddr6 = {
+		.sin6_family = AF_INET6,
+		.sin6_port = htons(COAP_PORT),
+		// .sin6_addr = DIRECT_GLOBAL_IP6_ADDRESS,
+	};
+	int sockfd;
+
+	ret = inet_pton(AF_INET6, MY_PC_ADDR6, &sockaddr6.sin6_addr);
 	if (ret <= 0) {
 		LOG_ERR("Invalid address / Address not supported");
 		return ret;
 	}
 
-	ret = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-	if (ret < 0) {
-		LOG_ERR("Connect failed");
+	ret = coap_client_init(&coap_client, NULL);
+	if (ret) {
+		LOG_ERR("Failed to init coap client, err %d", ret);
 		return ret;
 	}
+
+	sockfd = zsock_socket(sockaddr6.sin6_family, SOCK_DGRAM, 0);
+	if (sockfd < 0) {
+		LOG_ERR("Failed to create socket, err %d", errno);
+		return -errno;
+	}
+
+	// ret = zsock_setsockopt(sockfd,
+	// 		       IPPROTO_IPV6,
+	// 		       IPV6_MULTICAST_HOPS,
+	// 		       &mcast_hops,
+        //                        sizeof(mcast_hops));
 
 
 
@@ -179,9 +286,11 @@ int main(void)
 		SENSOR_DECODER_DT_GET(DT_NODELABEL(max30001)),
 		ecg_buf, SENSOR_CHAN_VOLTAGE, 0);
 	uint32_t network_ecg_voltage;
+	uint32_t network_ecg_buffer[32];
+	size_t buffer_len = 0;
 
 
-	for (i = 0; i<10000; i++) {
+	for (i = 0; i<1000; i++) {
 		ret = sensor_read(&ecg_iodev, &ecg_rtio_ctx,
 				  ecg_buf, sizeof(ecg_buf));
 		if (ret != 0) {
@@ -194,7 +303,23 @@ int main(void)
 
 		ret = sensor_decode(&ecg_decoder, &ecg_data, 1);
 		if (ret == -ENODATA) {
-			k_msleep(50);
+			send_ecg_buffer(&coap_client,
+					sockfd,
+					(struct sockaddr *)&sockaddr6,
+					// (struct sockaddr *)&serv_addr,
+					network_ecg_buffer,
+					buffer_len);
+
+			buffer_len = 0;
+
+
+
+			// break;
+
+
+
+			wdt_feed(wdt, main_wdt_chan_id);
+			k_msleep(150);
 			continue;
 		}
 		if (ret < 0) {
@@ -206,12 +331,15 @@ int main(void)
 		LOG_INF("🫀 Decoded ECG %" PRIsensor_q31_data,
 		       PRIsensor_q31_data_arg(ecg_data, 0));
 
-		network_ecg_voltage = htonl(ecg_data.readings[0].voltage);
-		ret = send(sockfd, &network_ecg_voltage,
-			   sizeof(network_ecg_voltage), 0);
-		if (ret < 0) {
-			LOG_ERR("Could not send (%d)", ret);
-		}
+		network_ecg_buffer[buffer_len] = htonl(ecg_data.readings[0].voltage);
+		buffer_len += 1;
+
+		// network_ecg_voltage = htonl(ecg_data.readings[0].voltage);
+		// ret = send(sockfd, &network_ecg_voltage,
+		// 	   sizeof(network_ecg_voltage), 0);
+		// if (ret < 0) {
+		// 	LOG_ERR("Could not send (%d)", ret);
+		// }
 
 		ecg_decoder.fit = 0;
 		wdt_feed(wdt, main_wdt_chan_id);
